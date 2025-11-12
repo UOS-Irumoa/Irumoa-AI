@@ -21,6 +21,8 @@ from PIL import Image
 import numpy as np
 import easyocr
 from openai import OpenAI
+import mysql.connector
+from mysql.connector import Error
 
 # =========================
 # 설정
@@ -56,28 +58,41 @@ CONNECT_TIMEOUT = 10
 READ_TIMEOUT = 20
 
 # =========================
-# OpenAI API 초기화
+# 환경 변수 로드 및 초기화
 # =========================
 from dotenv import load_dotenv
 load_dotenv()
 
+# OpenAI API 초기화
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    print("⚠️ WARNING: OPENAI_API_KEY 환경 변수가 설정되지 않았습니다.")
+    print(" OPENAI_API_KEY 확인하세요.")
     print("OCR 텍스트 정리 기능이 비활성화됩니다.")
     OPENAI_CLIENT = None
 else:
     OPENAI_CLIENT = OpenAI(api_key=OPENAI_API_KEY)
-    print("✅ OpenAI API 초기화 완료")
+    print("OpenAI API 초기화 완료")
+
+# MySQL DB 설정
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASSWORD', ''),
+    'database': os.getenv('DB_NAME', ''),
+    'port': int(os.getenv('DB_PORT', 3306)),
+    'charset': os.getenv('DB_CHARSET', 'utf8mb4'),
+    'autocommit': os.getenv('DB_AUTOCOMMIT', 'False') == 'True',
+    'use_pure': os.getenv('DB_USE_PURE', 'True') == 'True',
+}
 
 # =========================
 # EasyOCR 초기화
 # =========================
-# 전역으로 한 번만 초기화 (한글, 영어 지원)
+# 전역으로 한 번만
 log_print = lambda msg: print(f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}")
-log_print("🔧 EasyOCR 초기화 중... (최초 실행 시 모델 다운로드)")
+log_print("EasyOCR 초기화 중... (최초 실행 시 모델 다운로드)")
 OCR_READER = easyocr.Reader(['ko', 'en'], gpu=False, verbose=False)
-log_print("✅ EasyOCR 초기화 완료")
+log_print("EasyOCR 초기화 완료")
 
 # 쿠키 로드 (cookies.json 파일에서)
 COOKIE_FILE_PATH = "cookies.json"
@@ -171,11 +186,11 @@ def classify_program_categories(title: str, content: str) -> List[str]:
 def clean_ocr_text_with_ai(ocr_text: str) -> Optional[str]:
     """OpenAI API로 OCR 텍스트 정리 및 구조화"""
     if not OPENAI_CLIENT:
-        log("⚠️ OpenAI API 미설정 - 원본 텍스트 반환")
+        log("OpenAI API 미설정 - 원본 텍스트 반환")
         return ocr_text
 
     try:
-        log(f"🤖 AI로 텍스트 정리 중... ({len(ocr_text)} 글자)")
+        log(f"AI로 텍스트 정리 중... ({len(ocr_text)} 글자)")
 
         prompt = f"""다음은 포스터에서 OCR로 추출한 텍스트입니다.
 오타와 띄어쓰기를 수정하고, 핵심 정보를 구조화된 형태로 정리해주세요.
@@ -207,11 +222,11 @@ OCR 텍스트:
         )
 
         cleaned_text = response.choices[0].message.content.strip()
-        log(f"✅ AI 정리 완료: {len(cleaned_text)} 글자")
+        log(f"AI 정리 완료: {len(cleaned_text)} 글자")
         return cleaned_text
 
     except Exception as e:
-        log(f"❌ AI 정리 실패: {e}")
+        log(f"AI 정리 실패: {e}")
         log("원본 OCR 텍스트를 반환합니다")
         return ocr_text
 
@@ -219,7 +234,7 @@ OCR 텍스트:
 def extract_text_from_image(image_url: str) -> Optional[str]:
     """이미지 URL에서 OCR로 텍스트 추출"""
     try:
-        log(f"🖼️  이미지 OCR 시작: {image_url}")
+        log(f"이미지 OCR 시작: {image_url}")
 
         # 이미지 다운로드
         response = requests.get(
@@ -230,7 +245,7 @@ def extract_text_from_image(image_url: str) -> Optional[str]:
         )
 
         if response.status_code != 200:
-            log(f"❌ 이미지 다운로드 실패: HTTP {response.status_code}")
+            log(f"이미지 다운로드 실패: HTTP {response.status_code}")
             return None
 
         # PIL Image로 변환
@@ -244,7 +259,7 @@ def extract_text_from_image(image_url: str) -> Optional[str]:
         image_np = np.array(image)
 
         # OCR 실행
-        log(f"🔍 OCR 실행 중...")
+        log(f"OCR 실행 중...")
         results = OCR_READER.readtext(image_np)
 
         # 결과 텍스트 추출 (신뢰도 0.3 이상만)
@@ -255,11 +270,11 @@ def extract_text_from_image(image_url: str) -> Optional[str]:
 
         extracted_text = '\n'.join(extracted_lines)
 
-        log(f"✅ OCR 완료: {len(extracted_lines)}개 텍스트 라인 추출")
+        log(f"OCR 완료: {len(extracted_lines)}개 텍스트 라인 추출")
         return extracted_text.strip()
 
     except Exception as e:
-        log(f"❌ OCR 실패: {e}")
+        log(f"OCR 실패: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -325,38 +340,146 @@ def parse_grades(grade_text: str) -> list:
     return grades
 
 
-def print_db_insert_info(data: dict) -> None:
-    """DB 스키마에 맞게 저장될 데이터를 콘솔에 출력"""
-    print("\n" + "="*100)
-    print("📊 DB 저장 데이터 (콘솔 출력)")
-    print("="*100)
 
-    # 학과 파싱
-    departments = parse_departments(data.get('target_department', ''))
+def generate_mysql_json_object(data: dict) -> str:
+    """데이터를 MySQL JSON_OBJECT 형식의 SET 문으로 변환"""
 
-    # 학년 파싱 (int 코드: 0=전체, 1-5=학년, 6=졸업생, 7=대학원)
-    grades = parse_grades(data.get('target_grade', ''))
+    # 문자열 이스케이프 처리 (작은따옴표를 두 개로)
+    def escape_sql_string(s):
+        if s is None:
+            return 'NULL'
+        return s.replace("'", "''").replace('\\', '\\\\')
 
-    # 카테고리
-    categories = data.get('categories', ['기타'])
+    # JSON_ARRAY 생성 함수
+    def to_json_array(arr, is_numeric=False):
+        if not arr:
+            return "JSON_ARRAY()"
+        if is_numeric:
+            # 숫자 배열
+            items = ','.join(str(x) for x in arr)
+        else:
+            # 문자열 배열
+            items = ','.join(f"'{escape_sql_string(x)}'" for x in arr)
+        return f"JSON_ARRAY({items})"
 
-    # DB 저장용 데이터 구조 (ID는 자동 생성)
-    db_data = {
-        "title": data['title'],
-        "category": categories,  # 배열
-        "link": data.get('link', ''),
-        "department": departments,  # 배열
-        "grade": grades,  # 배열 (int 코드)
-        "content": data.get('content', ''),
-        "app_start_date": data.get('application_start'),
-        "app_end_date": data.get('application_end')
-    }
+    # 각 필드 추출
+    title = escape_sql_string(data.get('title', ''))
+    category_array = to_json_array(data.get('categories', []))
+    link = escape_sql_string(data.get('link', ''))
+    content = escape_sql_string(data.get('content', ''))
+    app_start_date = data.get('app_start_date') or 'NULL'
+    app_end_date = data.get('app_end_date') or 'NULL'
+    departments_array = to_json_array(data.get('department', []))
+    grades_array = to_json_array(data.get('grade', []), is_numeric=True)
 
-    print("\n[콘솔 출력 - JSON 형식]")
-    print(json.dumps(db_data, ensure_ascii=False, indent=2))
+    # SET 문 생성
+    sql = f"""SET @p = JSON_OBJECT(
+  'title', '{title}',
+  'category', {category_array},
+  'link', '{link}',
+  'content', '{content}',
+  'app_start_date', {'NULL' if app_start_date == 'NULL' else "'" + app_start_date + "'"},
+  'app_end_date', {'NULL' if app_end_date == 'NULL' else "'" + app_end_date + "'"},
+  'departments', {departments_array},
+  'grades', {grades_array}
+);"""
 
-    print("\n" + "="*100)
-    print()
+    return sql
+
+
+def get_db_connection():
+    """MySQL 데이터베이스 연결 생성"""
+    try:
+        connection = mysql.connector.connect(**DB_CONFIG)
+        if connection.is_connected():
+            log("MySQL 데이터베이스 연결 성공")
+            return connection
+    except Error as e:
+        log(f"MySQL 연결 실패: {e}")
+        return None
+
+
+def insert_program_to_db(data: dict) -> str:
+    """
+    프로그램 데이터를 DB의 program 테이블에 삽입
+    Returns: 'success', 'duplicate', 'error'
+    """
+    connection = None
+    cursor = None
+
+    try:
+        connection = get_db_connection()
+        if not connection:
+            return 'error'
+
+        cursor = connection.cursor()
+
+        # 중복 체크: link가 이미 존재하는지 확인
+        link = data.get('link', '')
+        if link:
+            check_query = "SELECT id FROM program WHERE link = %s LIMIT 1"
+            cursor.execute(check_query, (link,))
+            existing = cursor.fetchone()
+
+            if existing:
+                log(f"⏭중복 건너뛰기: {data.get('title', '')[:30]}... (기존 ID: {existing[0]})")
+                return 'duplicate'
+
+        # 학과 및 학년 파싱
+        departments = parse_departments(data.get('target_department', ''))
+        grades = parse_grades(data.get('target_grade', ''))
+        categories = data.get('categories', ['기타'])
+
+        # 중복 제거 (순서 유지하면서)
+        departments = list(dict.fromkeys(departments))  # 중복 제거
+        grades = list(dict.fromkeys(grades))
+        categories = list(dict.fromkeys(categories))
+
+        # Stored Procedure에 전달할 JSON 객체 생성
+        program_data = {
+            'title': data.get('title', ''),
+            'link': data.get('link', ''),
+            'content': data.get('content', ''),
+            'categories': categories,
+            'departments': departments,
+            'grades': grades
+        }
+
+        # 날짜 필드가 있으면 추가
+        if data.get('application_start'):
+            program_data['app_start_date'] = data.get('application_start')
+        if data.get('application_end'):
+            program_data['app_end_date'] = data.get('application_end')
+
+        # JSON 문자열로 변환
+        json_data = json.dumps(program_data, ensure_ascii=False)
+
+        # OUT 파라미터용 변수
+        out_program_id = 0
+
+        # Stored Procedure 호출
+        cursor.callproc('sp_create_program', [json_data, out_program_id])
+        connection.commit()
+
+        # OUT 파라미터에서 program_id 가져오기
+        cursor.execute("SELECT @_sp_create_program_1")
+        result = cursor.fetchone()
+        program_id = result[0] if result else None
+
+        log(f"DB 삽입 성공: {data.get('title', '')[:30]}... (ID: {program_id})")
+        return 'success'
+
+    except Error as e:
+        log(f"DB 삽입 실패: {e}")
+        if connection:
+            connection.rollback()
+        return 'error'
+
+    finally:
+        if cursor:
+            cursor.close()
+        if connection and connection.is_connected():
+            connection.close()
 
 
 def print_program_info(data: dict) -> None:
@@ -462,11 +585,11 @@ def collect_program_ids(limit_per_menu: int = RECENT_WINDOW_PER_MENU, max_pages:
                 )
 
                 if response.status_code != 200:
-                    log(f"❌ 페이지 {page} HTTP {response.status_code}")
+                    log(f"페이지 {page} HTTP {response.status_code}")
                     break
 
                 if "login" in response.url.lower() or "sso" in response.url.lower():
-                    log("⚠️ 로그인 필요 - 쿠키를 확인하세요")
+                    log("로그인 필요 - 쿠키를 확인하세요")
                     break
 
                 page_program_ids = extract_program_ids_from_html(response.text)
@@ -496,7 +619,7 @@ def collect_program_ids(limit_per_menu: int = RECENT_WINDOW_PER_MENU, max_pages:
                     time.sleep(2)
 
             except Exception as e:
-                log(f"❌ 페이지 {page} 요청 실패: {e}")
+                log(f"페이지 {page} 요청 실패: {e}")
                 import traceback
                 traceback.print_exc()
                 break
@@ -506,7 +629,7 @@ def collect_program_ids(limit_per_menu: int = RECENT_WINDOW_PER_MENU, max_pages:
         log(f"[{menu['name']}] 최종: {len(menu_program_ids)}개 수집")
 
     log(f"\n{'='*60}")
-    log(f"✅ 전체 메뉴 크롤링 완료: 총 {len(all_program_ids)}개 프로그램 발견")
+    log(f"전체 메뉴 크롤링 완료: 총 {len(all_program_ids)}개 프로그램 발견")
     log(f"{'='*60}\n")
     return all_program_ids
 
@@ -559,7 +682,7 @@ def fetch_program_html_with_playwright(program_id: int) -> Optional[str]:
         }
 
         url = f"{DETAIL_URL}?{urlencode(params)}"
-        log(f"📡 프로그램 {program_id} Playwright로 요청 중...")
+        log(f"프로그램 {program_id} Playwright로 요청 중...")
 
         with sync_playwright() as p:
             # 브라우저 옵션 설정 (봇 감지 우회)
@@ -607,7 +730,7 @@ def fetch_program_html_with_playwright(program_id: int) -> Optional[str]:
                 playwright_cookies.append(playwright_cookie)
 
             context.add_cookies(playwright_cookies)
-            log(f"🍪 {len(playwright_cookies)}개 쿠키 설정 완료")
+            log(f"{len(playwright_cookies)}개 쿠키 설정 완료")
 
             page = context.new_page()
 
@@ -621,7 +744,7 @@ def fetch_program_html_with_playwright(program_id: int) -> Optional[str]:
                 # 로그인 페이지로 리다이렉트 되었는지 확인
                 current_url = page.url
                 if "login" in current_url.lower() or "sso" in current_url.lower():
-                    log(f"⚠️ 로그인 페이지로 리다이렉트됨: {current_url}")
+                    log(f"로그인 페이지로 리다이렉트됨: {current_url}")
                     log("쿠키가 만료되었을 수 있습니다. uostory_login.py를 다시 실행하세요.")
                     browser.close()
                     return None
@@ -634,11 +757,11 @@ def fetch_program_html_with_playwright(program_id: int) -> Optional[str]:
 
             browser.close()
 
-        log(f"✅ 프로그램 {program_id} 로드 성공")
+        log(f"프로그램 {program_id} 로드 성공")
         return html
 
     except Exception as e:
-        log(f"❌ 요청 실패: {e}")
+        log(f"요청 실패: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -673,7 +796,7 @@ def parse_program_fields(html: str, program_id: int) -> Optional[dict]:
                     break
 
     if not title:
-        log(f"⚠️ Program {program_id}: 제목 없음")
+        log(f"Program {program_id}: 제목 없음")
         return None
 
     fields = {}
@@ -751,7 +874,7 @@ def parse_program_fields(html: str, program_id: int) -> Optional[dict]:
     # 내용 정리
     content = clean_content(content)
 
-    # 🖼️ 본문 내 이미지 찾기 및 OCR 실행
+    # 본문 내 이미지 찾기 및 OCR 실행
     image_urls = []
 
     if content_el:
@@ -774,7 +897,7 @@ def parse_program_fields(html: str, program_id: int) -> Optional[dict]:
                 image_urls.append(img_url)
 
     if image_urls:
-        log(f"📸 본문 내 이미지 {len(image_urls)}개 발견")
+        log(f"본문 내 이미지 {len(image_urls)}개 발견")
 
     # 이미지가 있으면 OCR 실행 + AI 정리
     ocr_texts = []
@@ -789,13 +912,13 @@ def parse_program_fields(html: str, program_id: int) -> Optional[dict]:
 
     # OCR 결과를 본문에 추가
     if ocr_texts:
-        log(f"✅ {len(ocr_texts)}개 이미지에서 텍스트 추출 및 정리 완료")
+        log(f"{len(ocr_texts)}개 이미지에서 텍스트 추출 및 정리 완료")
         content = content + "\n\n" + "\n\n".join(ocr_texts)
         content = clean_content(content)
     elif image_urls:
-        log(f"⚠️ 이미지는 있지만 OCR로 추출된 텍스트가 없습니다")
+        log(f"이미지는 있지만 OCR로 추출된 텍스트가 없습니다")
 
-    # 🏷️ 카테고리 자동 분류
+    # 카테고리 자동 분류
     categories = classify_program_categories(title, content)
 
     # 상태
@@ -846,7 +969,7 @@ def process_one_program(program_id: int) -> Optional[dict]:
     }
     parsed["link"] = f"{DETAIL_URL}?{urlencode(params)}"
 
-    log(f"✅ 파싱 완료: {parsed['title'][:30]}...")
+    log(f"파싱 완료: {parsed['title'][:30]}...")
     return parsed
 
 
@@ -869,6 +992,9 @@ def main():
     print()
 
     collected = []
+    inserted_count = 0
+    duplicate_count = 0
+    error_count = 0
 
     for idx, pid in enumerate(program_ids, 1):
         log(f"[{idx}/{len(program_ids)}] 프로그램 {pid} 처리 중...")
@@ -879,14 +1005,32 @@ def main():
             # 상세 정보 출력
             print_program_info(data)
             # DB 저장용 데이터 출력
-            print_db_insert_info(data)
+
+            # DB에 삽입
+            result = insert_program_to_db(data)
+            if result == 'success':
+                inserted_count += 1
+            elif result == 'duplicate':
+                duplicate_count += 1
+            elif result == 'error':
+                error_count += 1
+        else:
+            error_count += 1
 
         if idx < len(program_ids):
             sleep_time = random.uniform(REQUEST_SLEEP_MIN, REQUEST_SLEEP_MAX)
             log(f"{sleep_time:.1f}초 대기 중...")
             time.sleep(sleep_time)
 
-    log(f"총 {len(collected)}개 수집 완료")
+    log(f"\n{'='*60}")
+    log(f"크롤링 완료 통계:")
+    log(f"  - 총 처리: {len(program_ids)}개")
+    log(f"  - 수집 성공: {len(collected)}개")
+    log(f"  - DB 삽입: {inserted_count}개")
+    log(f"  - 중복 건너뜀: {duplicate_count}개")
+    if error_count > 0:
+        log(f"  - 처리 실패: {error_count}개")
+    log(f"{'='*60}")
 
     output_file = "uostory_programs.json"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -901,10 +1045,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log("\n⚠️ 중단됨")
+        log("\n중단됨")
         exit(0)
     except Exception as e:
-        log(f"❌ ERROR: {e}")
+        log(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
         exit(1)
