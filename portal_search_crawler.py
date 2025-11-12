@@ -44,7 +44,7 @@ SEARCH_CATEGORIES = [
 
 REQUEST_SLEEP_MIN = 4.0  # 최소 대기 시간 (초) - 증가
 REQUEST_SLEEP_MAX = 7.0  # 최대 대기 시간 (초) - 증가
-NOTICES_PER_CATEGORY = 50  # 각 카테고리별 수집할 공지 개수
+NOTICES_PER_CATEGORY = 25  # 각 카테고리별 수집할 공지 개수
 MAX_PAGES = 10  # 최대 페이지 수
 CONNECT_TIMEOUT = 10
 READ_TIMEOUT = 20
@@ -64,12 +64,12 @@ from openai import OpenAI
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
-    print("⚠️ OPENAI_API_KEY 확인하세요.")
+    print(" OPENAI_API_KEY 확인하세요.")
     print("LLM 정보 추출 기능이 비활성화됩니다.")
     OPENAI_CLIENT = None
 else:
     OPENAI_CLIENT = OpenAI(api_key=OPENAI_API_KEY)
-    print("✅ OpenAI API 초기화 완료")
+    print(" OpenAI API 초기화 완료")
 
 # =========================
 # EasyOCR 초기화
@@ -281,22 +281,37 @@ JSON 형식:
 
 def extract_text_from_image(image_url: str) -> Optional[str]:
     """이미지 URL에서 OCR로 텍스트 추출"""
+    import base64
+
     try:
-        log(f"    이미지 OCR 시작: {image_url}")
+        log(f"    이미지 OCR 시작: {image_url[:80]}...")
 
-        # 이미지 다운로드
-        response = requests.get(
-            image_url,
-            headers=get_headers(),
-            timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
-        )
+        # base64 데이터 URI 체크
+        if image_url.startswith('data:image'):
+            # data:image/png;base64,iVBORw0KG... 형식 처리
+            try:
+                header, encoded = image_url.split(',', 1)
+                image_data = base64.b64decode(encoded)
+                log(f"    base64 데이터 URI 디코딩 완료")
+            except Exception as e:
+                log(f"    base64 디코딩 실패: {e}")
+                return None
+        else:
+            # 일반 URL에서 다운로드
+            response = requests.get(
+                image_url,
+                headers=get_headers(),
+                timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
+            )
 
-        if response.status_code != 200:
-            log(f"    이미지 다운로드 실패: HTTP {response.status_code}")
-            return None
+            if response.status_code != 200:
+                log(f"    이미지 다운로드 실패: HTTP {response.status_code}")
+                return None
+
+            image_data = response.content
 
         # PIL Image로 변환
-        image = Image.open(BytesIO(response.content))
+        image = Image.open(BytesIO(image_data))
 
         # RGB로 변환 (RGBA 등의 경우 대비)
         if image.mode != 'RGB':
@@ -399,8 +414,34 @@ def insert_program_to_db(data: dict) -> str:
             existing = cursor.fetchone()
 
             if existing:
-                log(f"⏭ 중복 건너뛰기: {data.get('title', '')[:40]}... (기존 ID: {existing[0]})")
-                return 'duplicate'
+                existing_id = existing[0]
+
+                # 기존 카테고리 조회
+                cursor.execute(
+                    "SELECT category FROM program_category WHERE program_id = %s",
+                    (existing_id,)
+                )
+                existing_categories = {row[0] for row in cursor.fetchall()}
+
+                # 새로운 카테고리 파싱
+                new_categories = set(data.get('categories', []))
+
+                # 추가할 카테고리 찾기 (기존에 없는 것만)
+                categories_to_add = new_categories - existing_categories
+
+                if categories_to_add:
+                    # 새 카테고리 추가
+                    for category in categories_to_add:
+                        cursor.execute(
+                            "INSERT INTO program_category (program_id, category) VALUES (%s, %s)",
+                            (existing_id, category)
+                        )
+                    connection.commit()
+                    log(f"✅ 카테고리 병합: ID {existing_id} - {data.get('title', '')[:30]}... (+{', '.join(categories_to_add)})")
+                    return 'merged'
+                else:
+                    log(f"⏭ 중복 건너뛰기: {data.get('title', '')[:40]}... (기존 ID: {existing_id})")
+                    return 'duplicate'
 
         # 학과 및 학년 파싱
         departments = parse_departments(data.get('target_department', ''))
@@ -429,15 +470,13 @@ def insert_program_to_db(data: dict) -> str:
         # JSON 문자열로 변환
         json_data = json.dumps(program_data, ensure_ascii=False)
 
-        # Stored Procedure 호출
-        out_program_id = 0
-        cursor.callproc('sp_create_program', [json_data, out_program_id])
+        # Stored Procedure 호출 (OUT 파라미터)
+        args = [json_data, 0]
+        result_args = cursor.callproc('sp_create_program', args)
         connection.commit()
 
         # OUT 파라미터에서 program_id 가져오기
-        cursor.execute("SELECT @_sp_create_program_1")
-        result = cursor.fetchone()
-        program_id = result[0] if result else None
+        program_id = result_args[1]
 
         log(f"✅ DB 삽입 성공: {data.get('title', '')[:40]}... (ID: {program_id})")
         return 'success'
@@ -533,10 +572,14 @@ def collect_notices_by_search(search_keyword: str, category_name: str, limit: in
                         seq = match.group(2)
 
                 if seq and title:
+                    # 링크 생성 (상세 페이지 URL)
+                    link = f"{VIEW_URL}?identified=anonymous&list_id=FA1&seq={seq}"
+
                     notices.append({
                         'title': title,
                         'seq': seq,
-                        'category': category_name
+                        'category': category_name,
+                        'link': link
                     })
                     page_count += 1
 
@@ -823,7 +866,7 @@ def print_program_info(data: dict, idx: int) -> None:
     json_str = json.dumps(program_data, ensure_ascii=False, indent=2)
     print(f"\n프로시저 호출 형식:")
     print(f"SET @p = '{json_str}';")
-    print(f"CALL sp_create_program(@p, @program_id);")
+    
 
     print("="*80 + "\n")
 
@@ -837,6 +880,7 @@ def main():
     all_notices = []
     inserted_count = 0
     duplicate_count = 0
+    merged_count = 0
     error_count = 0
 
     # 각 카테고리별로 검색 및 크롤링
@@ -867,7 +911,34 @@ def main():
         for idx, notice in enumerate(notices, 1):
             log(f"\n[{category['name']} {idx}/{len(notices)}] 처리 중...")
 
-            # 상세 페이지 크롤링
+            # DB에 이미 있는지 빠른 체크 (OCR/LLM 실행 전)
+            link = notice['link']
+
+            # DB 연결해서 체크
+            connection = get_db_connection()
+            if connection:
+                try:
+                    cursor = connection.cursor()
+                    check_query = "SELECT id FROM program WHERE link = %s LIMIT 1"
+                    cursor.execute(check_query, (link,))
+                    existing = cursor.fetchone()
+
+                    if existing:
+                        log(f"  ⏭ DB에 이미 존재 (ID: {existing[0]}) - 크롤링 건너뛰기")
+                        duplicate_count += 1
+                        cursor.close()
+                        connection.close()
+                        continue  # 다음 공지로
+
+                    cursor.close()
+                    connection.close()
+
+                except Error as e:
+                    log(f"  ⚠️ DB 체크 실패: {e}")
+                    if connection:
+                        connection.close()
+
+            # 상세 페이지 크롤링 (DB에 없는 것만)
             data = crawl_notice_detail(
                 seq=notice['seq'],
                 categories=[notice['category']]
@@ -883,6 +954,8 @@ def main():
                 result = insert_program_to_db(data)
                 if result == 'success':
                     inserted_count += 1
+                elif result == 'merged':
+                    merged_count += 1
                 elif result == 'duplicate':
                     duplicate_count += 1
                 elif result == 'error':
@@ -901,6 +974,7 @@ def main():
     log(f"크롤링 완료 통계:")
     log(f"  - 총 수집: {len(all_notices)}개")
     log(f"  - DB 삽입: {inserted_count}개")
+    log(f"  - 카테고리 병합: {merged_count}개")
     log(f"  - 중복 건너뜀: {duplicate_count}개")
     if error_count > 0:
         log(f"  - 처리 실패: {error_count}개")

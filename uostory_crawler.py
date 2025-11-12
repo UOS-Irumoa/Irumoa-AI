@@ -233,23 +233,38 @@ OCR 텍스트:
 
 def extract_text_from_image(image_url: str) -> Optional[str]:
     """이미지 URL에서 OCR로 텍스트 추출"""
+    import base64
+
     try:
-        log(f"이미지 OCR 시작: {image_url}")
+        log(f"이미지 OCR 시작: {image_url[:80]}...")
 
-        # 이미지 다운로드
-        response = requests.get(
-            image_url,
-            headers=get_headers(),
-            cookies=COOKIES,
-            timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
-        )
+        # base64 데이터 URI 체크
+        if image_url.startswith('data:image'):
+            # data:image/png;base64,iVBORw0KG... 형식 처리
+            try:
+                header, encoded = image_url.split(',', 1)
+                image_data = base64.b64decode(encoded)
+                log(f"base64 데이터 URI 디코딩 완료")
+            except Exception as e:
+                log(f"base64 디코딩 실패: {e}")
+                return None
+        else:
+            # 일반 URL에서 다운로드
+            response = requests.get(
+                image_url,
+                headers=get_headers(),
+                cookies=COOKIES,
+                timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
+            )
 
-        if response.status_code != 200:
-            log(f"이미지 다운로드 실패: HTTP {response.status_code}")
-            return None
+            if response.status_code != 200:
+                log(f"이미지 다운로드 실패: HTTP {response.status_code}")
+                return None
+
+            image_data = response.content
 
         # PIL Image로 변환
-        image = Image.open(BytesIO(response.content))
+        image = Image.open(BytesIO(image_data))
 
         # RGB로 변환 (RGBA 등의 경우 대비)
         if image.mode != 'RGB':
@@ -422,8 +437,34 @@ def insert_program_to_db(data: dict) -> str:
             existing = cursor.fetchone()
 
             if existing:
-                log(f"⏭중복 건너뛰기: {data.get('title', '')[:30]}... (기존 ID: {existing[0]})")
-                return 'duplicate'
+                existing_id = existing[0]
+
+                # 기존 카테고리 조회
+                cursor.execute(
+                    "SELECT category FROM program_category WHERE program_id = %s",
+                    (existing_id,)
+                )
+                existing_categories = {row[0] for row in cursor.fetchall()}
+
+                # 새로운 카테고리 파싱
+                new_categories = set(data.get('categories', []))
+
+                # 추가할 카테고리 찾기 (기존에 없는 것만)
+                categories_to_add = new_categories - existing_categories
+
+                if categories_to_add:
+                    # 새 카테고리 추가
+                    for category in categories_to_add:
+                        cursor.execute(
+                            "INSERT INTO program_category (program_id, category) VALUES (%s, %s)",
+                            (existing_id, category)
+                        )
+                    connection.commit()
+                    log(f"✅ 카테고리 병합: ID {existing_id} - {data.get('title', '')[:30]}... (+{', '.join(categories_to_add)})")
+                    return 'merged'
+                else:
+                    log(f"⏭중복 건너뛰기: {data.get('title', '')[:30]}... (기존 ID: {existing_id})")
+                    return 'duplicate'
 
         # 학과 및 학년 파싱
         departments = parse_departments(data.get('target_department', ''))
@@ -454,17 +495,13 @@ def insert_program_to_db(data: dict) -> str:
         # JSON 문자열로 변환
         json_data = json.dumps(program_data, ensure_ascii=False)
 
-        # OUT 파라미터용 변수
-        out_program_id = 0
-
-        # Stored Procedure 호출
-        cursor.callproc('sp_create_program', [json_data, out_program_id])
+        # Stored Procedure 호출 (OUT 파라미터)
+        args = [json_data, 0]
+        result_args = cursor.callproc('sp_create_program', args)
         connection.commit()
 
         # OUT 파라미터에서 program_id 가져오기
-        cursor.execute("SELECT @_sp_create_program_1")
-        result = cursor.fetchone()
-        program_id = result[0] if result else None
+        program_id = result_args[1]
 
         log(f"DB 삽입 성공: {data.get('title', '')[:30]}... (ID: {program_id})")
         return 'success'
@@ -994,11 +1031,48 @@ def main():
     collected = []
     inserted_count = 0
     duplicate_count = 0
+    merged_count = 0
     error_count = 0
 
     for idx, pid in enumerate(program_ids, 1):
         log(f"[{idx}/{len(program_ids)}] 프로그램 {pid} 처리 중...")
 
+        # 링크 미리 생성 (DB 체크용)
+        params = {
+            "menuid": "001003002001",
+            "reservegroupid": "1",
+            "viewtype": "L",
+            "rectype": "L",
+            "thumbnail": "Y",
+            "lecturegroupid": str(pid)
+        }
+        link = f"{DETAIL_URL}?{urlencode(params)}"
+
+        # DB에 이미 있는지 빠른 체크 (OCR/LLM 실행 전)
+        connection = get_db_connection()
+        if connection:
+            try:
+                cursor = connection.cursor()
+                check_query = "SELECT id FROM program WHERE link = %s LIMIT 1"
+                cursor.execute(check_query, (link,))
+                existing = cursor.fetchone()
+
+                if existing:
+                    log(f"  ⏭ DB에 이미 존재 (ID: {existing[0]}) - 크롤링 건너뛰기")
+                    duplicate_count += 1
+                    cursor.close()
+                    connection.close()
+                    continue  # 다음 프로그램으로
+
+                cursor.close()
+                connection.close()
+
+            except Error as e:
+                log(f"  ⚠️ DB 체크 실패: {e}")
+                if connection:
+                    connection.close()
+
+        # 상세 페이지 크롤링 (DB에 없는 것만)
         data = process_one_program(pid)
         if data:
             collected.append(data)
@@ -1010,6 +1084,8 @@ def main():
             result = insert_program_to_db(data)
             if result == 'success':
                 inserted_count += 1
+            elif result == 'merged':
+                merged_count += 1
             elif result == 'duplicate':
                 duplicate_count += 1
             elif result == 'error':
@@ -1027,6 +1103,7 @@ def main():
     log(f"  - 총 처리: {len(program_ids)}개")
     log(f"  - 수집 성공: {len(collected)}개")
     log(f"  - DB 삽입: {inserted_count}개")
+    log(f"  - 카테고리 병합: {merged_count}개")
     log(f"  - 중복 건너뜀: {duplicate_count}개")
     if error_count > 0:
         log(f"  - 처리 실패: {error_count}개")
