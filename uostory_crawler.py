@@ -162,6 +162,7 @@ def classify_program_categories(title: str, content: str) -> List[str]:
 
     # 카테고리별 키워드 패턴
     patterns = {
+        "비교과": r"비교과",
         "공모전": r"공모전|경진대회|대회|콘테스트|contest|competition",
         "멘토링": r"멘토링|멘토|멘티|코칭|상담",
         "봉사": r"봉사|자원봉사|사회공헌|volunteer",
@@ -175,11 +176,7 @@ def classify_program_categories(title: str, content: str) -> List[str]:
         if re.search(pattern, text):
             categories.append(category)
 
-    # 매칭되는 것이 없으면 기타
-    if not categories:
-        categories.append("기타")
-
-    log(f"✅ 카테고리 분류: {', '.join(categories)}")
+    log(f"✅ 카테고리 분류: {', '.join(categories) if categories else '(없음)'}")
     return categories
 
 
@@ -469,7 +466,7 @@ def insert_program_to_db(data: dict) -> str:
         # 학과 및 학년 파싱
         departments = parse_departments(data.get('target_department', ''))
         grades = parse_grades(data.get('target_grade', ''))
-        categories = data.get('categories', ['기타'])
+        categories = data.get('categories', [])
 
         # 중복 제거 (순서 유지하면서)
         departments = list(dict.fromkeys(departments))  # 중복 제거

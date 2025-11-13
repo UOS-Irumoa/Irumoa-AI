@@ -34,12 +34,13 @@ VIEW_URL = f"{BASE_URL}/korNotice/view.do"
 
 # 검색 카테고리 정의 (검색어 = 카테고리)
 SEARCH_CATEGORIES = [
-    {"name": "공모전", "keyword": "공모"},
-    {"name": "특강", "keyword": "특강"},
-    {"name": "봉사", "keyword": "봉사"},
-    {"name": "취업", "keyword": "취업"},
-    {"name": "탐방", "keyword": "탐방"},
-    {"name": "멘토링", "keyword": "멘토링"}
+    # {"name": "공모전", "keyword": "공모"},
+    # {"name": "특강", "keyword": "특강"},
+    # {"name": "봉사", "keyword": "봉사"},
+    # {"name": "취업", "keyword": "취업"},
+    # {"name": "탐방", "keyword": "탐방"},
+    # {"name": "멘토링", "keyword": "멘토링"},
+    {"name": "비교과", "keyword": "비교과"}
 ]
 
 REQUEST_SLEEP_MIN = 4.0  # 최소 대기 시간 (초) - 증가
@@ -131,6 +132,7 @@ def classify_program_categories(title: str, content: str) -> List[str]:
 
     # 카테고리별 키워드 패턴
     patterns = {
+        "비교과": r"비교과",
         "공모전": r"공모전|콘테스트|contest",
         "멘토링": r"멘토링|멘토|멘티",
         "봉사": r"봉사|자원봉사|volunteer",
@@ -144,11 +146,7 @@ def classify_program_categories(title: str, content: str) -> List[str]:
         if re.search(pattern, text):
             categories.append(category)
 
-    # 매칭되는 것이 없으면 기타
-    if not categories:
-        categories.append("기타")
-
-    log(f"    ✅ 카테고리 분류: {', '.join(categories)}")
+    log(f"    ✅ 카테고리 분류: {', '.join(categories) if categories else '(없음)'}")
     return categories
 
 
@@ -215,7 +213,10 @@ def clean_and_extract_with_llm(title: str, raw_content: str) -> dict:
 
 **중요:**
 - 대상이 명시되지 않으면 "제한없음"
-- 날짜는 반드시 YYYY-MM-DD 형식
+- 날짜는 반드시 YYYY-MM-DD 형식으로 변환
+- "신청 기간: 2025년 6월 19일 ~ 7월 1일" → application_start: "2025-06-19", application_end: "2025-07-01"
+- "접수 기간: 2025.3.10(월) - 3.20(목)" → application_start: "2025-03-10", application_end: "2025-03-20"
+- 시작일과 종료일이 모두 있으면 반드시 둘 다 추출
 - JSON 형식으로만 답변
 
 JSON 형식:
@@ -446,7 +447,7 @@ def insert_program_to_db(data: dict) -> str:
         # 학과 및 학년 파싱
         departments = parse_departments(data.get('target_department', ''))
         grades = parse_grades(data.get('target_grade', ''))
-        categories = data.get('categories', ['기타'])
+        categories = data.get('categories', [])
 
         # 중복 제거
         departments = list(dict.fromkeys(departments))
@@ -851,7 +852,7 @@ def print_program_info(data: dict, idx: int) -> None:
         'title': data.get('title', ''),
         'link': data.get('link', ''),
         'content': data.get('content', ''),
-        'categories': data.get('categories', ['기타']),
+        'categories': data.get('categories', []),
         'departments': departments,
         'grades': grades
     }
