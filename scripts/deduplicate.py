@@ -312,7 +312,7 @@ def print_duplicate_report(groups: List[List[dict]]) -> None:
         print(f"   ID: {best['id']}")
         print(f"   출처: {get_source_from_link(best.get('link', ''))}")
         print(f"   제목: {best['title']}")
-        print(f"   링크: {best.get('link', '')")
+        print(f"   링크: {best.get('link', '')}")
         print(f"   내용 길이: {len(best.get('content', ''))}자")
 
         print(f"\n[DELETE] 삭제할 프로그램들:")
@@ -320,7 +320,7 @@ def print_duplicate_report(groups: List[List[dict]]) -> None:
             print(f"   ID: {dup['id']} (점수: {score_program(dup)})")
             print(f"   출처: {get_source_from_link(dup.get('link', ''))}")
             print(f"   제목: {dup['title']}")
-            print(f"   링크: {dup.get('link', '')")
+            print(f"   링크: {dup.get('link', '')}")
             print()
 
         total_keep += 1
