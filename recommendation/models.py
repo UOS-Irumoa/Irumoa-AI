@@ -3,7 +3,7 @@
 """
 
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date
 from pydantic import BaseModel, Field
 
 
@@ -15,8 +15,13 @@ class User(BaseModel):
     grade: int = Field(..., ge=1, le=7, description="학년 (1-5: 학년, 6: 졸업생, 7: 대학원생)")
     interests: List[str] = Field(
         ...,
-        description="관심사 목록",
+        description="관심사 목록 (공모전, 멘토링, 봉사, 취업, 탐방, 특강, 비교과)",
         examples=[["공모전", "취업"]]
+    )
+    interest_fields: List[str] = Field(
+        default_factory=list,
+        description="자유 입력 관심분야 (AI, 머신러닝, 디자인, 회계 등)",
+        examples=[["AI", "머신러닝", "데이터분석"]]
     )
 
     class Config:
@@ -24,8 +29,9 @@ class User(BaseModel):
             "example": {
                 "user_id": 1,
                 "department": "컴퓨터과학부",
-                "grade": 2,
-                "interests": ["공모전", "취업", "특강"]
+                "grade": 3,
+                "interests": ["공모전", "취업", "특강"],
+                "interest_fields": ["AI", "머신러닝", "데이터분석"]
             }
         }
 
@@ -89,7 +95,6 @@ class RecommendationResult(BaseModel):
 
     program: Program
     score: float = Field(..., description="추천 점수 (0-100)")
-    reasons: List[str] = Field(default_factory=list, description="추천 이유")
 
     class Config:
         json_schema_extra = {
@@ -105,13 +110,7 @@ class RecommendationResult(BaseModel):
                     "app_start_date": "2025-11-01",
                     "app_end_date": "2025-11-30"
                 },
-                "score": 85.0,
-                "reasons": [
-                    "학과 일치: 컴퓨터과학부",
-                    "학년 일치: 2학년",
-                    "관심사 일치: 공모전",
-                    "마감 임박 (7일 이내)"
-                ]
+                "score": 85.0
             }
         }
 
@@ -158,8 +157,7 @@ class RecommendationResponse(BaseModel):
                             "departments": ["컴퓨터과학부"],
                             "grades": [2]
                         },
-                        "score": 85.0,
-                        "reasons": ["학과 일치", "학년 일치", "관심사 일치"]
+                        "score": 85.0
                     }
                 ],
                 "total_count": 1,
