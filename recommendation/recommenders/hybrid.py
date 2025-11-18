@@ -7,8 +7,7 @@ Hybrid 추천 엔진 (규칙 기반 + TF-IDF)
 - 규칙 기반 (60%): 학과/학년/관심사 정확 매칭
   - 학과 일치: 40점 (제한없음: 20점)
   - 학년 일치: 30점 (제한없음: 15점)
-  - 관심사 일치: 카테고리 1개당 10점 (최대 30점)
-  - 마감 임박 보너스: 10점 (7일 이내)
+  - 관심사 일치: 카테고리 1개당 5점 (최대 30점, 7개까지 선택 가능)
 - TF-IDF (40%): 관심분야 텍스트 유사도
 
 추천 방식:
@@ -35,8 +34,8 @@ class HybridRecommender:
     WEIGHT_DEPARTMENT_UNRESTRICTED = 20.0
     WEIGHT_GRADE_EXACT = 30.0
     WEIGHT_GRADE_UNRESTRICTED = 15.0
-    WEIGHT_INTEREST_PER_MATCH = 10.0
-    BONUS_DEADLINE_NEAR = 10.0
+    WEIGHT_INTEREST_PER_MATCH = 5.0
+    MAX_INTEREST_SCORE = 30.0
 
     # Hybrid 점수 결합 가중치
     WEIGHT_RULE_BASED = 0.6  # 규칙 기반 60%
@@ -83,12 +82,6 @@ class HybridRecommender:
         score += interest_score
         reasons.extend(interest_reasons)
 
-        # 4. 마감 임박 보너스 (10점)
-        if program.is_deadline_near():
-            score += self.BONUS_DEADLINE_NEAR
-            days_remaining = (program.app_end_date - date.today()).days
-            reasons.append(f"마감 임박 ({days_remaining}일 남음)")
-
         return score, reasons
 
     def _calculate_department_score(self, user: User, program: Program) -> Tuple[float, str]:
@@ -134,6 +127,7 @@ class HybridRecommender:
             return 0.0, []
 
         score = len(matching_categories) * self.WEIGHT_INTEREST_PER_MATCH
+        score = min(score, self.MAX_INTEREST_SCORE)  # 최대 30점 제한
         reasons = [f"관심사 일치: {', '.join(matching_categories)}"]
 
         return score, reasons
@@ -345,18 +339,8 @@ class HybridRecommender:
             'reason': '; '.join(interest_reasons) if interest_reasons else ''
         }
 
-        # 마감 임박 점수
-        deadline_score = 0.0
-        deadline_reason = ''
-        if program.is_deadline_near():
-            deadline_score = self.BONUS_DEADLINE_NEAR
-            days_remaining = (program.app_end_date - date.today()).days
-            deadline_reason = f"마감 임박 ({days_remaining}일 남음)"
-
-        rule_breakdown['deadline'] = {'score': deadline_score, 'reason': deadline_reason}
-
         # 규칙 기반 총점
-        rule_score = dept_score + grade_score + interest_score + deadline_score
+        rule_score = dept_score + grade_score + interest_score
 
         # TF-IDF 점수
         tfidf_scores = self.calculate_tfidf_score(user, [program])

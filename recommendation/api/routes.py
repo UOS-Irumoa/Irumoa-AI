@@ -37,8 +37,8 @@ def setup_routes(app):
 
         사용자 프로필을 기반으로 맞춤형 프로그램 5개를 추천합니다.
 
-        **점수 체계:**
-        - 규칙 기반 (60%): 학과/학년/관심사 매칭
+        **점수 체계 (0-100점):**
+        - 규칙 기반 (60%): 학과 40점 + 학년 30점 + 관심사 최대 30점
         - TF-IDF (40%): 관심분야 텍스트 유사도
 
         **Example Request:**
@@ -68,7 +68,7 @@ def setup_routes(app):
                 programs=programs,
                 limit=5,
                 include_closed=False,
-                min_score=request.min_score
+                min_score=20.0
             )
 
             # 응답 형식 변환

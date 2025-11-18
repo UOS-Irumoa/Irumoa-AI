@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 class User(BaseModel):
     """사용자 프로필"""
 
-    user_id: Optional[int] = None
     department: str = Field(..., description="학과명 (예: 컴퓨터과학부)")
     grade: int = Field(..., ge=1, le=7, description="학년 (1-5: 학년, 6: 졸업생, 7: 대학원생)")
     interests: List[str] = Field(
@@ -27,7 +26,6 @@ class User(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "user_id": 1,
                 "department": "컴퓨터과학부",
                 "grade": 3,
                 "interests": ["공모전", "취업", "특강"],
@@ -119,9 +117,6 @@ class RecommendationRequest(BaseModel):
     """추천 요청"""
 
     user: User
-    limit: int = Field(default=20, ge=1, le=100, description="추천 개수")
-    include_closed: bool = Field(default=False, description="마감된 프로그램 포함 여부")
-    min_score: float = Field(default=20.0, ge=0, le=100, description="최소 점수")
 
     class Config:
         json_schema_extra = {
@@ -129,11 +124,9 @@ class RecommendationRequest(BaseModel):
                 "user": {
                     "department": "컴퓨터과학부",
                     "grade": 2,
-                    "interests": ["공모전", "취업"]
-                },
-                "limit": 20,
-                "include_closed": False,
-                "min_score": 20.0
+                    "interests": ["공모전", "취업"],
+                    "interest_fields": ["AI", "머신러닝"]
+                }
             }
         }
 
