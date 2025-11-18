@@ -19,11 +19,15 @@ Hybrid 추천 엔진 (규칙 기반 + TF-IDF)
 from typing import List, Tuple
 from datetime import date
 import re
+import logging
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from ..models import User, Program, RecommendationResult
+
+# 로거 설정
+logger = logging.getLogger(__name__)
 
 
 class HybridRecommender:
@@ -219,7 +223,7 @@ class HybridRecommender:
             return scores
 
         except Exception as e:
-            print(f"TF-IDF 계산 오류: {e}")
+            logger.error(f"TF-IDF 계산 오류: {e}", exc_info=True)
             return [0.0] * len(programs)
 
     # ==================== Hybrid 메서드 ====================
