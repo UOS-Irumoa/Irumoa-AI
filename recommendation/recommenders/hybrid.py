@@ -262,7 +262,7 @@ class HybridRecommender:
         self,
         user: User,
         programs: List[Program],
-        limit: int = 20,
+        limit: int = 5,
         include_closed: bool = False,
         min_score: float = 20.0
     ) -> List[RecommendationResult]:

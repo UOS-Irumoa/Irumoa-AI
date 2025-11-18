@@ -2,20 +2,30 @@
 FastAPI 기반 추천 API 서버
 
 Usage:
+    python recommendation/api/app.py
+    또는
     uvicorn recommendation.api.app:app --reload --port 8000
 
 Endpoints:
-    POST /recommend - 프로그램 추천
-    POST /explain - 점수 계산 상세 설명
+    POST /recommend - 프로그램 추천 (5개)
     GET /health - 헬스체크
-    GET /programs - 프로그램 목록 조회
-    GET /categories - 카테고리 목록 조회
 """
+
+import sys
+import os
+
+# 직접 실행 시 프로젝트 루트를 sys.path에 추가
+if __name__ == "__main__":
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, project_root)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import setup_routes
+if __name__ == "__main__":
+    from recommendation.api.routes import setup_routes
+else:
+    from .routes import setup_routes
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -24,7 +34,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS 설정 (프론트엔드 연동용)
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 프로덕션에서는 특정 도메인만 허용
@@ -39,4 +49,10 @@ setup_routes(app)
 
 if __name__ == "__main__":
     import uvicorn
+    print("\n" + "=" * 80)
+    print("  UOS 공지사항 추천 API 서버 시작")
+    print("  - 서버 주소: http://localhost:8000")
+    print("  - Swagger 문서: http://localhost:8000/docs")
+    print("  - 헬스체크: http://localhost:8000/health")
+    print("=" * 80 + "\n")
     uvicorn.run(app, host="0.0.0.0", port=8000)

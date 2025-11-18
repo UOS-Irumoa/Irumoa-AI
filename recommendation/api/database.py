@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import HTTPException
 import mysql.connector
-from mysql.connector import Error
+from mysql.connector import pooling, Error
 from dotenv import load_dotenv
 
 from ..models import Program
@@ -26,10 +26,28 @@ DB_CONFIG = {
     'use_pure': True,
 }
 
+# 커넥션 풀 생성 (서버 시작 시 한 번만)
+try:
+    connection_pool = pooling.MySQLConnectionPool(
+        pool_name="recommendation_pool",
+        pool_size=5,  # 동시 연결 5개 유지
+        pool_reset_session=True,
+        **DB_CONFIG
+    )
+    print("[INFO] 커넥션 풀 생성 완료 (pool_size=5)")
+except Error as e:
+    print(f"[ERROR] 커넥션 풀 생성 실패: {e}")
+    connection_pool = None
+
 
 def get_db_connection():
-    """MySQL 데이터베이스 연결"""
+    """커넥션 풀에서 연결 가져오기"""
     try:
+        if connection_pool:
+            connection = connection_pool.get_connection()
+            if connection.is_connected():
+                return connection
+        # 풀이 없으면 직접 연결 (fallback)
         connection = mysql.connector.connect(**DB_CONFIG)
         if connection.is_connected():
             return connection
@@ -136,41 +154,64 @@ def fetch_programs_from_db(
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
-        # 프로그램별 카테고리, 학과, 학년 조회
+        if not rows:
+            cursor.close()
+            connection.close()
+            return []
+
+        # 프로그램 ID 목록
+        program_ids = [row['id'] for row in rows]
+        placeholders = ','.join(['%s'] * len(program_ids))
+
+        # 카테고리 일괄 조회
+        cursor.execute(
+            f"SELECT program_id, category FROM program_category WHERE program_id IN ({placeholders})",
+            program_ids
+        )
+        categories_map = {}
+        for r in cursor.fetchall():
+            pid = r['program_id']
+            if pid not in categories_map:
+                categories_map[pid] = []
+            categories_map[pid].append(r['category'])
+
+        # 학과 일괄 조회
+        cursor.execute(
+            f"SELECT program_id, department FROM program_department WHERE program_id IN ({placeholders})",
+            program_ids
+        )
+        departments_map = {}
+        for r in cursor.fetchall():
+            pid = r['program_id']
+            if pid not in departments_map:
+                departments_map[pid] = []
+            departments_map[pid].append(r['department'])
+
+        # 학년 일괄 조회
+        cursor.execute(
+            f"SELECT program_id, grade FROM program_grade WHERE program_id IN ({placeholders})",
+            program_ids
+        )
+        grades_map = {}
+        for r in cursor.fetchall():
+            pid = r['program_id']
+            if pid not in grades_map:
+                grades_map[pid] = []
+            grades_map[pid].append(r['grade'])
+
+        # 프로그램 객체 생성
         programs = []
         for row in rows:
             program_id = row['id']
-
-            # 카테고리 조회
-            cursor.execute(
-                "SELECT category FROM program_category WHERE program_id = %s",
-                (program_id,)
-            )
-            categories_result = [r['category'] for r in cursor.fetchall()]
-
-            # 학과 조회
-            cursor.execute(
-                "SELECT department FROM program_department WHERE program_id = %s",
-                (program_id,)
-            )
-            departments = [r['department'] for r in cursor.fetchall()]
-
-            # 학년 조회
-            cursor.execute(
-                "SELECT grade FROM program_grade WHERE program_id = %s",
-                (program_id,)
-            )
-            grades = [r['grade'] for r in cursor.fetchall()]
-
             programs.append(
                 Program(
-                    id=row['id'],
+                    id=program_id,
                     title=row['title'],
                     link=row['link'],
                     content=row['content'] or '',
-                    categories=categories_result,
-                    departments=departments,
-                    grades=grades,
+                    categories=categories_map.get(program_id, []),
+                    departments=departments_map.get(program_id, []),
+                    grades=grades_map.get(program_id, []),
                     app_start_date=row['app_start_date'],
                     app_end_date=row['app_end_date'],
                     posted_date=None

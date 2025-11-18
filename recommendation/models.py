@@ -138,33 +138,55 @@ class RecommendationRequest(BaseModel):
         }
 
 
-class RecommendationResponse(BaseModel):
-    """추천 응답"""
+class ProgramResponse(BaseModel):
+    """프로그램 응답 (간소화)"""
 
-    recommendations: List[RecommendationResult]
-    total_count: int
-    user: User
+    id: int
+    title: str
+    link: str
+    content: str
+    appStartDate: Optional[str] = None  # camelCase
+    appEndDate: Optional[str] = None    # camelCase
+    categories: List[str] = Field(default_factory=list)
+    departments: List[str] = Field(default_factory=list)
+    grades: List[int] = Field(default_factory=list)
 
     class Config:
         json_schema_extra = {
             "example": {
-                "recommendations": [
+                "id": 1,
+                "title": "[대학혁신] 특강",
+                "link": "https://uostory.uos.ac.kr/...",
+                "content": "강의 일자: 2025. 11. 18...",
+                "appStartDate": "2025-11-11",
+                "appEndDate": "2025-11-17",
+                "categories": ["특강"],
+                "departments": ["제한없음"],
+                "grades": [1, 2, 3, 4, 7]
+            }
+        }
+
+
+class RecommendationResponse(BaseModel):
+    """추천 응답"""
+
+    content: List[ProgramResponse]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "content": [
                     {
-                        "program": {
-                            "id": 1,
-                            "title": "2025 AI 해커톤 대회",
-                            "categories": ["공모전"],
-                            "departments": ["컴퓨터과학부"],
-                            "grades": [2]
-                        },
-                        "score": 85.0
+                        "id": 1,
+                        "title": "[대학혁신] 특강",
+                        "link": "https://uostory.uos.ac.kr/...",
+                        "content": "강의 일자: 2025. 11. 18...",
+                        "appStartDate": "2025-11-11",
+                        "appEndDate": "2025-11-17",
+                        "categories": ["특강"],
+                        "departments": ["제한없음"],
+                        "grades": [1, 2, 3, 4]
                     }
-                ],
-                "total_count": 1,
-                "user": {
-                    "department": "컴퓨터과학부",
-                    "grade": 2,
-                    "interests": ["공모전", "취업"]
-                }
+                ]
             }
         }
