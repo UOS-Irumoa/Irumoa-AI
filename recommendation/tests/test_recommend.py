@@ -121,13 +121,13 @@ def main():
     # 1. 사용자 프로필 설정
     print("\n[1단계] 사용자 프로필 설정")
     user = User(
-        department="컴퓨터과학부",
+        departments=["컴퓨터과학부"],
         grade=2,
         interests=["공모전", "취업", "특강"],
         interest_fields=["AI", "머신러닝", "데이터분석", "인공지능"]
     )
 
-    print(f"  - 학과: {user.department}")
+    print(f"  - 학과: {', '.join(user.departments)}")
     print(f"  - 학년: {user.grade}학년")
     print(f"  - 관심사: {', '.join(user.interests)}")
     print(f"  - 관심분야: {', '.join(user.interest_fields)}")

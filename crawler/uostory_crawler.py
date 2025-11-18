@@ -1,4 +1,4 @@
-# src/uosai/crawler/uostory_crawler_with_cookie.py
+# uostory_crawler.py
 """
 UOS Story 비교과 프로그램 크롤러
 - 브라우저 쿠키를 사용하여 로그인 상태 유지

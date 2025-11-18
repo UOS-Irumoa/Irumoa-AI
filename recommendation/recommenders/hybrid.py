@@ -89,13 +89,15 @@ class HybridRecommender:
         return score, reasons
 
     def _calculate_department_score(self, user: User, program: Program) -> Tuple[float, str]:
-        """학과 매칭 점수 계산"""
+        """학과 매칭 점수 계산 (복수 학과 지원)"""
         if not program.departments:
             return 0.0, ""
 
-        # 정확한 학과 일치
-        if user.department in program.departments:
-            return self.WEIGHT_DEPARTMENT_EXACT, f"학과 일치: {user.department}"
+        # 사용자 학과 중 하나라도 프로그램 학과와 일치하는지 확인
+        matched_departments = set(user.departments) & set(program.departments)
+        if matched_departments:
+            dept_str = ", ".join(matched_departments)
+            return self.WEIGHT_DEPARTMENT_EXACT, f"학과 일치: {dept_str}"
 
         # 제한없음
         if "제한없음" in program.departments:
@@ -165,7 +167,7 @@ class HybridRecommender:
     def _create_user_query(self, user: User) -> str:
         """사용자 프로필을 텍스트 쿼리로 변환"""
         parts = [
-            user.department,
+            ' '.join(user.departments),  # 복수 학과 지원
             ' '.join(user.interests),
             ' '.join(user.interest_fields)
         ]

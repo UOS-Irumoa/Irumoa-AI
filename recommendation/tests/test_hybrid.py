@@ -160,15 +160,14 @@ def test_user_1():
     print("="*80)
 
     user = User(
-        user_id=1,
-        department="컴퓨터과학부",
+        departments=["컴퓨터과학부"],
         grade=2,
         interests=["공모전", "취업"],
         interest_fields=["AI", "머신러닝", "데이터분석", "인공지능"]
     )
 
     print(f"\n사용자 프로필:")
-    print(f"  학과: {user.department}")
+    print(f"  학과: {', '.join(user.departments)}")
     print(f"  학년: {user.grade}학년")
     print(f"  관심사: {', '.join(user.interests)}")
     print(f"  관심분야: {', '.join(user.interest_fields)}")
@@ -224,15 +223,14 @@ def test_user_2():
     print("="*80)
 
     user = User(
-        user_id=2,
-        department="경영학부",
+        departments=["경영학부"],
         grade=3,
         interests=["특강", "멘토링"],
         interest_fields=["마케팅", "회계", "경영전략", "재무관리"]
     )
 
     print(f"\n사용자 프로필:")
-    print(f"  학과: {user.department}")
+    print(f"  학과: {', '.join(user.departments)}")
     print(f"  학년: {user.grade}학년")
     print(f"  관심사: {', '.join(user.interests)}")
     print(f"  관심분야: {', '.join(user.interest_fields)}")
@@ -266,15 +264,14 @@ def test_user_3():
     print("="*80)
 
     user = User(
-        user_id=3,
-        department="국어국문학과",
+        departments=["국어국문학과"],
         grade=1,
         interests=["봉사", "탐방"],
         interest_fields=["문학", "글쓰기", "독서"]
     )
 
     print(f"\n사용자 프로필:")
-    print(f"  학과: {user.department}")
+    print(f"  학과: {', '.join(user.departments)}")
     print(f"  학년: {user.grade}학년")
     print(f"  관심사: {', '.join(user.interests)}")
     print(f"  관심분야: {', '.join(user.interest_fields)}")

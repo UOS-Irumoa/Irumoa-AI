@@ -57,7 +57,7 @@ def get_db_connection():
 
 
 def fetch_programs_from_db(
-    department: Optional[str] = None,
+    departments: Optional[List[str]] = None,
     grade: Optional[int] = None,
     categories: Optional[List[str]] = None,
     include_closed: bool = False
@@ -66,7 +66,7 @@ def fetch_programs_from_db(
     DB에서 프로그램 조회
 
     Args:
-        department: 학과 필터 (선택)
+        departments: 학과 필터 (선택, 최대 2개)
         grade: 학년 필터 (선택)
         categories: 카테고리 필터 (선택)
         include_closed: 마감된 프로그램 포함 여부
@@ -100,14 +100,15 @@ def fetch_programs_from_db(
         if not include_closed:
             query += " AND (p.app_end_date IS NULL OR p.app_end_date >= CURDATE())"
 
-        # 학과 필터 (옵션)
-        if department:
-            query += """
+        # 학과 필터 (옵션, 복수 학과 지원)
+        if departments and len(departments) > 0:
+            dept_placeholders = ', '.join(['%s'] * len(departments))
+            query += f"""
                 AND (
                     EXISTS (
                         SELECT 1 FROM program_department pd
                         WHERE pd.program_id = p.id
-                        AND pd.department = %s
+                        AND pd.department IN ({dept_placeholders})
                     )
                     OR EXISTS (
                         SELECT 1 FROM program_department pd
@@ -116,7 +117,7 @@ def fetch_programs_from_db(
                     )
                 )
             """
-            params.append(department)
+            params.extend(departments)
 
         # 학년 필터 (옵션)
         if grade is not None:

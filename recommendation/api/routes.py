@@ -45,7 +45,19 @@ def setup_routes(app):
         ```json
         {
             "user": {
-                "department": "컴퓨터과학부",
+                "departments": ["컴퓨터과학부"],
+                "grade": 2,
+                "interests": ["공모전", "취업"],
+                "interest_fields": ["AI", "머신러닝"]
+            }
+        }
+        ```
+
+        **복수전공 Example:**
+        ```json
+        {
+            "user": {
+                "departments": ["컴퓨터과학부", "경영학부"],
                 "grade": 2,
                 "interests": ["공모전", "취업"],
                 "interest_fields": ["AI", "머신러닝"]
@@ -56,7 +68,7 @@ def setup_routes(app):
         try:
             # DB에서 프로그램 조회 (카테고리 필터링)
             programs = fetch_programs_from_db(
-                department=request.user.department,
+                departments=request.user.departments,
                 grade=request.user.grade,
                 categories=request.user.interests,
                 include_closed=False
