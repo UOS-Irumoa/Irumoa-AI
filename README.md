@@ -6,18 +6,6 @@
 
 ---
 
-## 목차
-
-- [주요 기능](#주요-기능)
-- [시스템 구조](#시스템-구조)
-- [설치 방법](#설치-방법)
-- [사용 방법](#사용-방법)
-- [프로젝트 구조](#프로젝트-구조)
-- [API 문서](#api-문서)
-- [개발 가이드](#개발-가이드)
-
----
-
 ## 주요 기능
 
 ### 1. 자동 크롤링 시스템
@@ -88,13 +76,6 @@
 
 ## 설치 방법
 
-### 1. 필수 요구사항
-- Python 3.8+
-- MySQL 8.0+
-- OpenAI API Key (날짜 파싱용)
-
-### 2. 설치
-
 ```bash
 # 저장소 클론
 git clone https://github.com/your-org/Irumoa-AI.git
@@ -105,34 +86,6 @@ pip install -r requirements.txt
 
 # Playwright 브라우저 설치
 playwright install chromium
-```
-
-### 3. 환경 변수 설정
-
-`.env` 파일 생성:
-```bash
-# Database
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=irumoa
-DB_PORT=3306
-DB_CHARSET=utf8mb4
-
-# OpenAI API (크롤러용)
-OPENAI_API_KEY=sk-...
-
-# Recommendation API (선택)
-ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com
-```
-
-### 4. 데이터베이스 초기화
-
-```sql
--- MySQL에서 실행
-CREATE DATABASE irumoa CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 테이블 생성 (스키마는 별도 SQL 파일 참고)
 ```
 
 ---
@@ -147,7 +100,7 @@ python crawler/portal_search_crawler.py
 ```
 - 각 카테고리별로 50개씩 수집
 - 최대 10페이지까지 탐색
-- 4-7초 랜덤 대기 (서버 부하 방지)
+- 4-7초 랜덤 대기 
 
 #### UOStory 프로그램 크롤링
 ```bash
@@ -189,12 +142,7 @@ python recommendation/api/app.py
 uvicorn recommendation.api.app:app --reload --port 8000
 ```
 
-서버 주소:
-- API: http://localhost:8000
-- Swagger 문서: http://localhost:8000/docs
-- 헬스체크: http://localhost:8000/health
 
----
 
 ## 프로젝트 구조
 
@@ -289,97 +237,11 @@ Irumoa-AI/
 
 ---
 
-## 개발 가이드
-
-### 크롤러 커스터마이징
-
-#### 새로운 카테고리 추가
-`crawler/portal_search_crawler.py`:
-```python
-SEARCH_CATEGORIES = [
-    {"name": "공모전", "keyword": "공모"},
-    {"name": "새카테고리", "keyword": "검색어"},  # 추가
-]
-```
-
-#### 수집 개수 조정
-```python
-NOTICES_PER_CATEGORY = 50  # 기본: 25
-MAX_PAGES = 20             # 기본: 10
-```
-
-### 추천 알고리즘 튜닝
-
-#### 점수 가중치 조정
-`recommendation/recommenders/hybrid.py`:
-```python
-# 규칙 기반 점수
-WEIGHT_DEPARTMENT_EXACT = 40.0       # 학과 정확 일치
-WEIGHT_GRADE_EXACT = 30.0            # 학년 정확 일치
-WEIGHT_INTEREST_PER_MATCH = 5.0      # 관심사 1개당
-
-# Hybrid 결합 가중치
-WEIGHT_RULE_BASED = 0.6  # 규칙 기반 60%
-WEIGHT_TF_IDF = 0.4      # TF-IDF 40%
-```
-
-#### 최소 점수 조정
-`recommendation/api/routes.py`:
-```python
-recommendations = recommender.recommend(
-    user=request.user,
-    programs=programs,
-    limit=5,
-    min_score=20.0  # 조정 가능 (0-100)
-)
-```
-
-### 테스트 실행
-
-```bash
-# 추천 엔진 테스트 (실제 DB 사용)
-python -m recommendation.tests.test_hybrid
-
-# API 테스트
-python -m recommendation.tests.test_recommend
-```
-
----
-
 ## 기술 스택
 
 - **Backend:** Python 3.8+, FastAPI, Uvicorn
-- **ML/AI:** scikit-learn (TF-IDF), OpenAI GPT (날짜 파싱)
+- **ML/AI:** scikit-learn (TF-IDF), OpenAI GPT
 - **Database:** MySQL 8.0+, mysql-connector-python
 - **Web Scraping:** Playwright, BeautifulSoup4, Requests
 - **OCR:** EasyOCR, Pillow
 - **Validation:** Pydantic
-
----
-
-## 라이선스
-
-이 프로젝트는 [MIT License](LICENSE) 하에 배포됩니다.
-
----
-
-## 문의 및 기여
-
-- **이슈 제보:** [GitHub Issues](https://github.com/your-org/Irumoa-AI/issues)
-- **기여 방법:** Pull Request 환영합니다
-- **문의:** your-email@example.com
-
----
-
-## 업데이트 내역
-
-### v1.0.0 (2025-11-18)
-- 포털 공지사항 크롤러 구현
-- UOStory 비교과 프로그램 크롤러 구현
-- Hybrid 추천 엔진 (규칙 기반 + TF-IDF)
-- FastAPI 기반 REST API 구현
-- 중복 제거 및 데이터 정제 스크립트
-
----
-
-**Made with ❤️ for UOS Students**
