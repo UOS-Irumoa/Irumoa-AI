@@ -247,9 +247,30 @@ def extract_text_from_image(image_url: str) -> Optional[str]:
                 return None
         else:
             # 일반 URL에서 다운로드
+            # 외부 도메인인 경우 Referer 처리
+            from urllib.parse import urlparse
+
+            parsed_url = urlparse(image_url)
+            if parsed_url.netloc and 'uos.ac.kr' not in parsed_url.netloc:
+                # 외부 도메인 - Referer를 해당 도메인으로 설정
+                referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+            else:
+                # 내부 도메인 - BASE_URL 사용
+                referer = BASE_URL
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": referer,
+                "Sec-Fetch-Dest": "image",
+                "Sec-Fetch-Mode": "no-cors",
+                "Sec-Fetch-Site": "cross-site"
+            }
+
             response = requests.get(
                 image_url,
-                headers=get_headers(),
+                headers=headers,
                 cookies=COOKIES,
                 timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
             )
@@ -426,7 +447,7 @@ def insert_program_to_db(data: dict) -> str:
 
         cursor = connection.cursor()
 
-        # 중복 체크: link가 이미 존재하는지 확인
+        # [갱신 모드] 중복 시 기존 데이터 삭제 후 재삽입
         link = data.get('link', '')
         if link:
             check_query = "SELECT id FROM program WHERE link = %s LIMIT 1"
@@ -435,33 +456,12 @@ def insert_program_to_db(data: dict) -> str:
 
             if existing:
                 existing_id = existing[0]
+                log(f"🔄 기존 데이터 발견 (ID: {existing_id}) - 삭제 후 재삽입")
 
-                # 기존 카테고리 조회
-                cursor.execute(
-                    "SELECT category FROM program_category WHERE program_id = %s",
-                    (existing_id,)
-                )
-                existing_categories = {row[0] for row in cursor.fetchall()}
-
-                # 새로운 카테고리 파싱
-                new_categories = set(data.get('categories', []))
-
-                # 추가할 카테고리 찾기 (기존에 없는 것만)
-                categories_to_add = new_categories - existing_categories
-
-                if categories_to_add:
-                    # 새 카테고리 추가
-                    for category in categories_to_add:
-                        cursor.execute(
-                            "INSERT INTO program_category (program_id, category) VALUES (%s, %s)",
-                            (existing_id, category)
-                        )
-                    connection.commit()
-                    log(f"✅ 카테고리 병합: ID {existing_id} - {data.get('title', '')[:30]}... (+{', '.join(categories_to_add)})")
-                    return 'merged'
-                else:
-                    log(f"⏭중복 건너뛰기: {data.get('title', '')[:30]}... (기존 ID: {existing_id})")
-                    return 'duplicate'
+                # 기존 데이터 삭제 (program_category는 ON DELETE CASCADE로 자동 삭제됨)
+                cursor.execute("DELETE FROM program WHERE id = %s", (existing_id,))
+                connection.commit()
+                log(f"  ✅ 기존 데이터 삭제 완료")
 
         # 학과 및 학년 파싱
         departments = parse_departments(data.get('target_department', ''))
@@ -1045,29 +1045,29 @@ def main():
         }
         link = f"{DETAIL_URL}?{urlencode(params)}"
 
-        # DB에 이미 있는지 빠른 체크 (OCR/LLM 실행 전)
-        connection = get_db_connection()
-        if connection:
-            try:
-                cursor = connection.cursor()
-                check_query = "SELECT id FROM program WHERE link = %s LIMIT 1"
-                cursor.execute(check_query, (link,))
-                existing = cursor.fetchone()
-
-                if existing:
-                    log(f"  ⏭ DB에 이미 존재 (ID: {existing[0]}) - 크롤링 건너뛰기")
-                    duplicate_count += 1
-                    cursor.close()
-                    connection.close()
-                    continue  # 다음 프로그램으로
-
-                cursor.close()
-                connection.close()
-
-            except Error as e:
-                log(f"  ⚠️ DB 체크 실패: {e}")
-                if connection:
-                    connection.close()
+        # [갱신 모드] 크롤링 전 중복 체크 비활성화 - 모든 프로그램 크롤링
+        # connection = get_db_connection()
+        # if connection:
+        #     try:
+        #         cursor = connection.cursor()
+        #         check_query = "SELECT id FROM program WHERE link = %s LIMIT 1"
+        #         cursor.execute(check_query, (link,))
+        #         existing = cursor.fetchone()
+        #
+        #         if existing:
+        #             log(f"  ⏭ DB에 이미 존재 (ID: {existing[0]}) - 크롤링 건너뛰기")
+        #             duplicate_count += 1
+        #             cursor.close()
+        #             connection.close()
+        #             continue  # 다음 프로그램으로
+        #
+        #         cursor.close()
+        #         connection.close()
+        #
+        #     except Error as e:
+        #         log(f"  ⚠️ DB 체크 실패: {e}")
+        #         if connection:
+        #             connection.close()
 
         # 상세 페이지 크롤링 (DB에 없는 것만)
         data = process_one_program(pid)

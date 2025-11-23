@@ -20,7 +20,6 @@ if __name__ == "__main__":
     sys.path.insert(0, project_root)
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 if __name__ == "__main__":
     from recommendation.api.routes import setup_routes
@@ -34,14 +33,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS 설정
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 프로덕션에서는 특정 도메인만 허용
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS 설정 제거 - 백엔드에서 프록시로 처리
 
 # 라우트 등록
 setup_routes(app)
