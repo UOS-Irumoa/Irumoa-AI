@@ -35,7 +35,7 @@ def setup_routes(app):
         """
         프로그램 추천 API
 
-        사용자 프로필을 기반으로 맞춤형 프로그램 5개를 추천합니다.
+        사용자 프로필을 기반으로 맞춤형 프로그램 10개를 추천합니다.
 
         **점수 체계 (0-100점):**
         - 규칙 기반 (60%): 학과 40점 + 학년 30점 + 관심사 최대 30점
@@ -74,11 +74,11 @@ def setup_routes(app):
                 include_closed=False
             )
 
-            # 추천 실행 (최대 5개)
+            # 추천 실행 (최대 10개)
             recommendations = recommender.recommend(
                 user=request.user,
                 programs=programs,
-                limit=5,
+                limit=10,
                 include_closed=False,
                 min_score=20.0
             )
