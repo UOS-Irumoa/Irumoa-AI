@@ -21,7 +21,6 @@ RUN pip install --no-cache-dir -r requirements-api.txt
 
 # 소스 복사 (추천 API만)
 COPY recommendation/ /app/recommendation/
-COPY .env /app/.env
 
 # 서비스 포트
 ENV PORT=9001
