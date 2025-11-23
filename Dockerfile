@@ -15,11 +15,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # requirements가 있다면 먼저 복사/설치해서 캐시 극대화
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+# 추천 API용 경량화된 requirements 사용
+COPY requirements-api.txt /app/
+RUN pip install --no-cache-dir -r requirements-api.txt
 
-# 소스 복사
-COPY . /app
+# 소스 복사 (추천 API만)
+COPY recommendation/ /app/recommendation/
+COPY .env /app/.env
 
 # 서비스 포트
 ENV PORT=9001
