@@ -21,11 +21,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app
 
 # 서비스 포트
-ENV PORT=8000
+ENV PORT=9001
 # 앱 모듈 경로
 ENV APP_MODULE=recommendation.api.app:app
 
-EXPOSE 8000
+EXPOSE 9001
 
 # uvicorn으로 실행 (FastAPI/ASGI 호환)
 CMD ["sh", "-c", "python -m uvicorn ${APP_MODULE} --host 0.0.0.0 --port ${PORT}"]
