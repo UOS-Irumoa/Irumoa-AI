@@ -98,7 +98,7 @@ def fetch_programs_from_db(
 
         # 마감 필터
         if not include_closed:
-            query += " AND (p.app_end_date IS NULL OR p.app_end_date >= CURDATE())"
+            query += " AND p.app_end_date IS NOT NULL AND p.app_end_date >= CURDATE()"
 
         # 학과 필터 (옵션, 복수 학과 지원)
         if departments and len(departments) > 0:

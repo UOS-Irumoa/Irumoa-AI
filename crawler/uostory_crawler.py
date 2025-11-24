@@ -157,24 +157,39 @@ def clean_content(text: str) -> str:
 
 def classify_program_categories(title: str, content: str) -> List[str]:
     """프로그램 제목과 내용을 기반으로 카테고리 자동 분류 (다중 선택 가능)"""
-    text = (title + " " + content).lower()
+    title_lower = title.lower()
+    content_lower = content.lower()
     categories = []
 
-    # 카테고리별 키워드 패턴
+    # 카테고리별 키워드 패턴 (우선순위 순서)
+    # 제목에서 먼저 확인하고, 내용은 보조적으로만 사용
     patterns = {
         "비교과": r"비교과",
-        "공모전": r"공모전|경진대회|대회|콘테스트|contest|competition",
-        "멘토링": r"멘토링|멘토|멘티|코칭|상담",
-        "봉사": r"봉사|자원봉사|사회공헌|volunteer",
-        "취업": r"취업|채용|면접|이력서|자기소개서|커리어|인턴|job|career|employment|입사",
-        "탐방": r"탐방|견학|방문|투어|답사|field.?trip",
-        "특강": r"특강|강연|세미나|워크샵|교육|lecture|seminar|workshop",
+        "공모전": r"공모전|경진대회|콘테스트",
+        "멘토링": r"멘토링",  # "멘토링"만 명시적으로 매칭
+        "봉사": r"봉사|자원봉사",
+        "취업": r"취업",  # "취업"만 명시적으로 매칭
+        "탐방": r"탐방|견학|답사",
+        "특강": r"특강|강연|세미나|워크샵"
     }
 
-    # 각 카테고리별로 매칭 확인 (여러 개 가능)
+    # 1단계: 제목에서 명확한 카테고리 찾기 (우선순위)
     for category, pattern in patterns.items():
-        if re.search(pattern, text):
+        if re.search(pattern, title_lower):
             categories.append(category)
+
+    # 2단계: 제목에서 못 찾았으면 내용에서 찾기 (보조)
+    if not categories:
+        for category, pattern in patterns.items():
+            if re.search(pattern, content_lower):
+                categories.append(category)
+
+    # 3단계: 여전히 없으면 "비교과"로 기본 분류
+    if not categories:
+        categories.append("비교과")
+
+    # 중복 제거
+    categories = list(dict.fromkeys(categories))
 
     log(f"✅ 카테고리 분류: {', '.join(categories) if categories else '(없음)'}")
     return categories
